@@ -15,6 +15,9 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 RECIPIENT_PHONE_NUMBER = '+491735159382'
 
+# Regex pattern for Red Bull products
+pattern = re.compile(r'Red Bull', re.IGNORECASE)
+
 
 # Funktion zum Senden einer SMS über Twilio
 def send_sms(message):
@@ -32,17 +35,32 @@ with sync_playwright() as p:
     page = context.new_page()
     page.goto('https://www.rewe.de/marktseite/moosinning/431024/rewe-markt-einfangstrasse-6/')
     page.wait_for_load_state('load', timeout=20000)
+    page.goto('https://www.rewe.de/angebote/nationale-angebote/')
+
+    page.wait_for_load_state('load', timeout=20000)
     products = page.query_selector_all('article[class="cor-offer-renderer-tile cor-link"]')
     for product in products:
-        label = product.get_attribute('aria-label')
-        name = label.split(',')[0]
-        price = float(label.split(' ')[-1][:-1].replace(',', '.'))
-        pattern = re.compile(r"red\s*bull.*?", re.IGNORECASE)
-        # Suche nach dem Muster im Text
-        match = re.search(pattern, name)
-        if match and price < 0.99:
-            message = f"Erfolgreiche Suche nach 'RedBull' mit einem Preis unter 1,0 €!"
-            # SMS senden, wenn das gewünschte Produkt gefunden wurde
-            send_sms(message)
+        h3_element = product.query_selector('h3.cor-offer-information__title')
+        if h3_element:
+            link_element = h3_element.query_selector('a.cor-offer-information__title-link')
+            if link_element:
+                product_name = link_element.inner_text().strip()
+                product_price = link_element.get_attribute('aria-label').split(',')[-1].strip()
+                product_id = link_element.get_attribute('data-offer-id')
+
+                # Use the regex pattern to check for Red Bull products
+                if pattern.search(product_name):
+                    # Extract the numeric price value
+                    price_value = float(product_price.replace(',', '.').split()[-1])
+
+                    # Check if the price is less than 0.99 euros
+                    if price_value < 0.99:
+                        message = f"Red Bull deal alert! {product_name} for only {product_price}!"
+                        send_sms(message)
+
+                # print(f"Product: {product_name}")
+                # print(f"Price: {product_price}")
+                # print(f"Product ID: {product_id}")
+                # print("---")
 
     browser.close()
