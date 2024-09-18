@@ -16,8 +16,8 @@ TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 RECIPIENT_PHONE_NUMBER = '+491735159382'
 
 # Regex pattern for Red Bull products
-pattern = re.compile(r'Red Bull', re.IGNORECASE)
-# pattern = re.compile(r'bauer', re.IGNORECASE)
+#pattern = re.compile(r'Red Bull', re.IGNORECASE)
+pattern = re.compile(r'bauer', re.IGNORECASE)
 
 # Funktion zum Senden einer SMS über Twilio
 def send_sms(message):
