@@ -9,6 +9,7 @@ if os.path.exists(env_file_path):
         for line in f:
             key, value = line.strip().split('=')
             os.environ[key] = value
+
 # Lade die Umgebungsvariablen
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
@@ -17,7 +18,6 @@ RECIPIENT_PHONE_NUMBER = '+491735159382'
 
 # Regex pattern for Red Bull products
 pattern = re.compile(r'Red Bull', re.IGNORECASE)
-# pattern = re.compile(r'bauer', re.IGNORECASE)
 
 # Funktion zum Senden einer SMS über Twilio
 def send_sms(message):
@@ -28,48 +28,36 @@ def send_sms(message):
         to=RECIPIENT_PHONE_NUMBER
     )
 
-
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False)  # Setze headless=True
+    browser = p.chromium.launch(headless=True)  # Setze headless=True für unsichtbaren Modus
     context = browser.new_context(viewport={"width": 1920, "height": 1080})
     page = context.new_page()
-    page.goto('https://www.rewe.de/marktseite/moosinning/431024/rewe-markt-einfangstrasse-6/')
+    page.goto('https://www.meinprospekt.de/angebote/red-bull')
     page.wait_for_load_state('load', timeout=20000)
-    page.goto('https://www.rewe.de/angebote/nationale-angebote/')
 
-    page.wait_for_load_state('load', timeout=20000)
-    products = page.query_selector_all('article[class="cor-offer-renderer-tile cor-link"]')
-    for product in products:
-        h3_element = product.query_selector('h3.cor-offer-information__title')
-        if h3_element:
-            link_element = h3_element.query_selector('a.cor-offer-information__title-link')
-            if link_element:
-                product_name = link_element.inner_text().strip()
-                product_id = link_element.get_attribute('data-offer-id')
+    # Select the section with the offers
+    offer_section = page.query_selector('section[data-testid="OfferGrid"]')
 
-                # Find the price element
-                price_element = product.query_selector('.cor-offer-price__tag-price')
-                if price_element:
-                    product_price = price_element.inner_text().strip()
+    if offer_section:
+        products = offer_section.query_selector_all('div.flex.cursor-pointer.flex-col.justify-between.rounded-lg.border.border-gray.bg-white.text-dark')
+        for product in products:
+            store_element = product.query_selector('.truncate.text-sm.text-dark1')
+            price_element = product.query_selector('.text-md.font-bold.text-primary')
 
-                    # Extract the numeric price value
-                    price_string = product_price.replace(',', '.').replace('€', '').strip()
-                    try:
-                        price_value = float(price_string)
+            if store_element and price_element:
+                store = store_element.inner_text().strip()
+                price_text = price_element.inner_text().strip()
 
-                        # Use the regex pattern to check for Red Bull products
-                        if pattern.search(product_name):
-                            # Check if the price is less than 0.99 euros
-                            if price_value < 0.99:
-                                message = f"Red Bull deal alert! {product_name} for only {product_price}!"
-                                send_sms(message)
-                                print(message)
-                    except ValueError:
-                        print(f"Could not convert price to float: {product_price}")
+                try:
+                    # Convert price to float
+                    price_value = float(price_text.replace('€', '').replace(',', '.').strip())
 
-                # print(f"Product: {product_name}")
-                # print(f"Price: {product_price}")
-                # print(f"Product ID: {product_id}")
-                # print("---")
+                    # Check if the price is less than 0.99 euros and the store or product name matches the pattern
+                    if price_value < 0.99 :
+                        message = f"Deal alert! {store} offers Red Bull for only {price_text}!"
+                        send_sms(message)
+                        print(message)
+                except ValueError:
+                    print(f"Could not convert price to float: {price_text}")
 
     browser.close()
