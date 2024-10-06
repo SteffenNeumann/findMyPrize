@@ -2,7 +2,7 @@ from playwright.sync_api import sync_playwright
 from twilio.rest import Client
 import os
 import urllib.parse
-from geopy.geocoders import Nominatim
+import requests
 
 env_file_path = './twilio.env'
 if os.path.exists(env_file_path):
@@ -11,7 +11,7 @@ if os.path.exists(env_file_path):
             key, value = line.strip().split('=')
             os.environ[key] = value
 
-# Lade die Umgebungsvariablen
+# Load environment variables
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
@@ -20,13 +20,21 @@ RECIPIENT_PHONE_NUMBER = '+491735159382'
 product = "Red Bull"
 zip_code = "85435"
 
-# Initialize the geocoder
-geolocator = Nominatim(user_agent="my_app")
+def get_coordinates(zip_code, country="Germany"):
+    base_url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "postalcode": zip_code,
+        "country": country,
+        "format": "json"
+    }
+    response = requests.get(base_url, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        if data:
+            return float(data[0]["lat"]), float(data[0]["lon"])
+    return None
 
-# Get the location from the zip code
-location = geolocator.geocode(zip_code + ", Germany")
-
-# Funktion zum Senden einer SMS über Twilio
+# Function to send SMS via Twilio
 def send_sms(message):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     message = client.messages.create(
@@ -40,9 +48,9 @@ with sync_playwright() as p:
     context = browser.new_context(viewport={"width": 1920, "height": 1080})
     page = context.new_page()
 
-    if location:
-        lat = location.latitude
-        lng = location.longitude
+    coordinates = get_coordinates(zip_code)
+    if coordinates:
+        lat, lng = coordinates
         
         encoded_query = urllib.parse.quote(product)
         
@@ -68,8 +76,8 @@ with sync_playwright() as p:
                         # Convert price to float
                         price_value = float(price_text.replace('€', '').replace(',', '.').strip())
 
-                        # Check if the price is less than 0.99 euros and the store or product name matches the pattern
-                        if price_value < 0.99 :
+                        # Check if the price is less than 0.99 euros
+                        if price_value < 0.99:
                             message = f"Deal alert! {store} offers Red Bull for only {price_text}!"
                             send_sms(message)
                             print(message)
