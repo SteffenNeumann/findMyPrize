@@ -1,7 +1,8 @@
 from playwright.sync_api import sync_playwright
 from twilio.rest import Client
 import os
-import re
+import urllib.parse
+from geopy.geocoders import Nominatim
 
 env_file_path = './twilio.env'
 if os.path.exists(env_file_path):
@@ -16,8 +17,14 @@ TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 RECIPIENT_PHONE_NUMBER = '+491735159382'
 
-# Regex pattern for Red Bull products
-pattern = re.compile(r'Red Bull', re.IGNORECASE)
+product = "Red Bull"
+zip_code = "85435"
+
+# Initialize the geocoder
+geolocator = Nominatim(user_agent="my_app")
+
+# Get the location from the zip code
+location = geolocator.geocode(zip_code + ", Germany")
 
 # Funktion zum Senden einer SMS über Twilio
 def send_sms(message):
@@ -29,35 +36,47 @@ def send_sms(message):
     )
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)  # Setze headless=True für unsichtbaren Modus
+    browser = p.chromium.launch(headless=False)
     context = browser.new_context(viewport={"width": 1920, "height": 1080})
     page = context.new_page()
-    page.goto('https://www.meinprospekt.de/angebote/red-bull')
-    page.wait_for_load_state('load', timeout=20000)
 
-    # Select the section with the offers
-    offer_section = page.query_selector('section[data-testid="OfferGrid"]')
+    if location:
+        lat = location.latitude
+        lng = location.longitude
+        
+        encoded_query = urllib.parse.quote(product)
+        
+        flexible_url = f"https://www.meinprospekt.de/webapp/?query={encoded_query}&lat={lat}&lng={lng}"
+        
+        page.goto(flexible_url)
+        page.wait_for_load_state('load', timeout=20000)
 
-    if offer_section:
-        products = offer_section.query_selector_all('div.flex.cursor-pointer.flex-col.justify-between.rounded-lg.border.border-gray.bg-white.text-dark')
-        for product in products:
-            store_element = product.query_selector('.truncate.text-sm.text-dark1')
-            price_element = product.query_selector('.text-md.font-bold.text-primary')
+        # Select the section with the offers
+        offer_section = page.query_selector('section[data-testid="OfferGrid"]')
 
-            if store_element and price_element:
-                store = store_element.inner_text().strip()
-                price_text = price_element.inner_text().strip()
+        if offer_section:
+            products = offer_section.query_selector_all('div.flex.cursor-pointer.flex-col.justify-between.rounded-lg.border.border-gray.bg-white.text-dark')
+            for product in products:
+                store_element = product.query_selector('.truncate.text-sm.text-dark1')
+                price_element = product.query_selector('.text-md.font-bold.text-primary')
 
-                try:
-                    # Convert price to float
-                    price_value = float(price_text.replace('€', '').replace(',', '.').strip())
+                if store_element and price_element:
+                    store = store_element.inner_text().strip()
+                    price_text = price_element.inner_text().strip()
 
-                    # Check if the price is less than 0.99 euros and the store or product name matches the pattern
-                    if price_value < 0.99 :
-                        message = f"Deal alert! {store} offers Red Bull for only {price_text}!"
-                        send_sms(message)
-                        print(message)
-                except ValueError:
-                    print(f"Could not convert price to float: {price_text}")
+                    try:
+                        # Convert price to float
+                        price_value = float(price_text.replace('€', '').replace(',', '.').strip())
+
+                        # Check if the price is less than 0.99 euros and the store or product name matches the pattern
+                        if price_value < 0.99 :
+                            message = f"Deal alert! {store} offers Red Bull for only {price_text}!"
+                            send_sms(message)
+                            print(message)
+                    except ValueError:
+                        print(f"Could not convert price to float: {price_text}")
+
+    else:
+        print("Could not find coordinates for the given zip code")
 
     browser.close()
