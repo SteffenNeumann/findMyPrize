@@ -1,8 +1,16 @@
 from playwright.sync_api import sync_playwright
 from twilio.rest import Client
 import os
+from geopy.geocoders import Nominatim
+
+geolocator = Nominatim(user_agent="my_user_agent")
+city ="munich"
+country ="Germany"
+loc = geolocator.geocode(city+','+ country)
+print("latitude is :-" ,loc.latitude,"\nlongtitude is:-" ,loc.longitude)
 
 env_file_path = './twilio.env'
+
 if os.path.exists(env_file_path):
     with open(env_file_path, 'r') as f:
         for line in f:
@@ -36,6 +44,17 @@ with sync_playwright() as p:
     
     page.goto(url)
     page.wait_for_load_state('load', timeout=20000)
+    # Wait for the input field to be visible
+    page.wait_for_selector('input.css-1icdecq.e1qjrc2b5')
+
+   
+    page.fill('input.css-1icdecq.e1qjrc2b5', zip_code)
+
+    # Submit the form or trigger the page load
+    # If there's a submit button, you can click it:
+    # page.click('button[type="submit"]')
+    # Or if you want to simulate pressing Enter:
+    page.press('input.css-1icdecq.e1qjrc2b5', 'Enter')
 
     # Select the section with the offers
     offer_section = page.query_selector('section[data-testid="OfferGrid"]')
