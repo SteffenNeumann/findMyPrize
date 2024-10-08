@@ -2,12 +2,16 @@ from playwright.sync_api import sync_playwright
 from twilio.rest import Client
 import os
 from geopy.geocoders import Nominatim
+from datetime import datetime
 
 geolocator = Nominatim(user_agent="my_user_agent")
-city ="munich"
+city ="Erding"
 country ="Germany"
+product = "Red Bull"
+
 loc = geolocator.geocode(city+','+ country)
-print("latitude is :-" ,loc.latitude,"\nlongtitude is:-" ,loc.longitude)
+my_long=loc.longitude
+my_lat=loc.latitude
 
 env_file_path = './twilio.env'
 
@@ -17,16 +21,11 @@ if os.path.exists(env_file_path):
             key, value = line.strip().split('=')
             os.environ[key] = value
 
-# Load environment variables
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
 RECIPIENT_PHONE_NUMBER = '+491735159382'
 
-product = "Red Bull"
-zip_code = "85435"
-
-# Function to send SMS via Twilio
 def send_sms(message):
     client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
     message = client.messages.create(
@@ -36,31 +35,22 @@ def send_sms(message):
     )
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False)
+    browser = p.chromium.launch(headless=True)
     context = browser.new_context(viewport={"width": 1920, "height": 1080})
     page = context.new_page()
 
-    url = f"https://www.meinprospekt.de/webapp/?query={product}&zipcode={zip_code}"
+    url = f"https://www.meinprospekt.de/webapp/?query={product}&lat={my_lat}&lng={my_long}"
     
     page.goto(url)
     page.wait_for_load_state('load', timeout=20000)
-    # Wait for the input field to be visible
-    page.wait_for_selector('input.css-1icdecq.e1qjrc2b5')
 
-   
-    page.fill('input.css-1icdecq.e1qjrc2b5', zip_code)
-
-    # Submit the form or trigger the page load
-    # If there's a submit button, you can click it:
-    # page.click('button[type="submit"]')
-    # Or if you want to simulate pressing Enter:
-    page.press('input.css-1icdecq.e1qjrc2b5', 'Enter')
-
-    # Select the section with the offers
     offer_section = page.query_selector('section[data-testid="OfferGrid"]')
 
-    if offer_section:
+    if not offer_section:
+        output = f"No Product {product} found"
+    else:
         products = offer_section.query_selector_all('div.flex.cursor-pointer.flex-col.justify-between.rounded-lg.border.border-gray.bg-white.text-dark')
+        output = ""
         for product in products:
             store_element = product.query_selector('.truncate.text-sm.text-dark1')
             price_element = product.query_selector('.text-md.font-bold.text-primary')
@@ -70,16 +60,23 @@ with sync_playwright() as p:
                 price_text = price_element.inner_text().strip()
 
                 try:
-                    # Convert price to float
                     price_value = float(price_text.replace('€', '').replace(',', '.').strip())
 
-                    # Check if the price is less than 0.99 euros
                     if price_value < 0.99:
                         message = f"Deal alert! {store} offers Red Bull for only {price_text}!"
                         send_sms(message)
-                        print(message)
+                        output += message + "\n"
                 except ValueError:
                     print(f"Could not convert price to float: {price_text}")
 
     browser.close()
-    
+
+    # Store the information in a log file
+    log_file_path = '/Users/steffen/Lokal/CronJobs/logfile.log'
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_entry = f"{timestamp} - {output}\n"
+
+    with open(log_file_path, 'a') as log_file:
+        log_file.write(log_entry)
+
+print(output)
