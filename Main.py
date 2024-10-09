@@ -6,11 +6,12 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
+from dataclasses import dataclass
 
 geolocator = Nominatim(user_agent="my_user_agent")
 city ="Erding"
 country ="Germany"
-product = "Joghurt"
+
 
 loc = geolocator.geocode(city+','+ country)
 my_long=loc.longitude
@@ -41,57 +42,61 @@ def send_email(subject, message):
     text = msg.as_string()
     server.sendmail(sender_email, receiver_email, text)
     server.quit()
+    
+  
 
+@dataclass
+class Product:
+    name: str
+    target_price: float
 
+PRODUCTS_AND_PRICES = [
+    Product("Joghurt", 0.99),
+    Product("Milch", 1.20),
+    Product("Red Bull", 0.90),
+  ]
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False)
-    context = browser.new_context(viewport={"width": 1920, "height": 1080})
-    page = context.new_page()
-
-    url = f"https://www.meinprospekt.de/webapp/?query={product}&lat={my_lat}&lng={my_long}"
+    page = browser.new_page()
     
-    page.goto(url)
-    page.wait_for_load_state('load', timeout=20000)
-
-    offer_section = page.wait_for_selector('.search-group-grid-content', timeout=30000)
-
-    if not offer_section:
-        output = f"No Product {product} found"
-    else:
-        products = offer_section.query_selector_all('.card.card--offer.slider-preventClick')
-        output = ""
-        for product in products:
-            store_element = product.query_selector('.card__subtitle')
-            price_element = product.query_selector('.card__prices-main-price')
-
-            if store_element and price_element:
-                store = store_element.inner_text().strip()
-                price_text = price_element.inner_text().strip()
-
-                try:
-                    price_value = float(price_text.replace('€', '').replace(',', '.').strip())
-                    if price_value < 0.99:
-                        subject = "Deal Alert!"
-                        product_name_element = product.query_selector('.card__title')
-                        if product_name_element:
-                            product_name = product_name_element.inner_text().strip()
-                        else:
-                            product_name = "Unknown Product"
-                        
-                        message = f"Deal alert! {store} offers {product_name} for only {price_text}!"
-                        send_email(subject, message)
-                        output += message + "\n"
-                except ValueError:
-                    print(f"Could not convert price to float: {price_text}")
-
+    for item in PRODUCTS_AND_PRICES:
+        product = item.name
+        target_price = item.target_price
+        url = f"https://www.meinprospekt.de/webapp/?query={product}&lat={my_lat}&lng={my_long}"
+      
+        page.goto(url)
+        page.wait_for_load_state('load', timeout=20000)
+        offer_section = page.wait_for_selector('.search-group-grid-content', timeout=30000)
+        if not offer_section:
+            output = f"No Product {product} found"
+        else:
+            products = offer_section.query_selector_all('.card.card--offer.slider-preventClick')
+            output = ""
+            for product_element in products:
+                store_element = product_element.query_selector('.card__subtitle')
+                price_element = product_element.query_selector('.card__prices-main-price')
+                if store_element and price_element:
+                    store = store_element.inner_text().strip()
+                    price_text = price_element.inner_text().strip()
+                    try:
+                        price_value = float(price_text.replace('€', '').replace(',', '.').strip())
+                        if price_value <= target_price:
+                            subject = "Deal Alert!"
+                            product_name_element = product_element.query_selector('.card__title')
+                            if product_name_element:
+                                product_name = product_name_element.inner_text().strip()
+                            else:
+                                product_name = "Unknown Product"
+                          
+                            message = f"Deal alert! {store} offers {product_name} for {price_text}! (Target price: €{target_price:.2f})"
+                            send_email(subject, message)
+                            output += message + "\n"
+                    except ValueError:                         print(f"Could not convert price to float: {price_text}")
+        # Log and print output for each product
+        log_file_path = '/Users/steffen/Lokal/CronJobs/logfile.log'
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        log_entry = f"{timestamp} - {output}\n"
+        with open(log_file_path, 'a') as log_file:             log_file.write(log_entry)
+        print(output)
+    # Close the browser after checking all products
     browser.close()
-
-    # Store the information in a log file
-    log_file_path = '/Users/steffen/Lokal/CronJobs/logfile.log'
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_entry = f"{timestamp} - {output}\n"
-
-    with open(log_file_path, 'a') as log_file:
-        log_file.write(log_entry)
-
-print(output)
