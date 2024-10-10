@@ -7,11 +7,11 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from dotenv import load_dotenv
 from dataclasses import dataclass
+import sqlite3
 
 geolocator = Nominatim(user_agent="my_user_agent")
 city = "Erding"
 country = "Germany"
-
 
 loc = geolocator.geocode(city + "," + country)
 my_long = loc.longitude
@@ -23,6 +23,22 @@ EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
 
+def init_db():
+    conn = sqlite3.connect('deals.db')
+    c = conn.cursor()
+    c.execute('''CREATE TABLE IF NOT EXISTS deals
+                 (timestamp TEXT, product TEXT, store TEXT, price REAL, target_price REAL)''')
+    conn.commit()
+    conn.close()
+
+def log_deal(product, store, price, target_price):
+    conn = sqlite3.connect('deals.db')
+    c = conn.cursor()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    c.execute("INSERT INTO deals VALUES (?, ?, ?, ?, ?)",
+              (timestamp, product, store, price, target_price))
+    conn.commit()
+    conn.close()
 
 def send_email(subject, message):
     sender_email = EMAIL_ADDRESS
@@ -43,18 +59,19 @@ def send_email(subject, message):
     server.sendmail(sender_email, receiver_email, text)
     server.quit()
 
-
 @dataclass
 class Product:
     name: str
     target_price: float
 
-
 PRODUCTS_AND_PRICES = [
-    Product("Joghurt", 0.99),
-    Product("Milch", 1.20),
+    Product("Crema d'Oro", 11.00),
+    Product("Hafermilch", 0.98),
     Product("Red Bull", 0.90),
 ]
+
+init_db()
+
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=False)
     page = browser.new_page()
@@ -100,15 +117,9 @@ with sync_playwright() as p:
 
                             message = f"Deal alert! {store} offers {product_name} for {price_text}! (Target price: €{target_price:.2f})"
                             send_email(subject, message)
+                            log_deal(product_name, store, price_value, target_price)
                             output += message + "\n"
                     except ValueError:
                         print(f"Could not convert price to float: {price_text}")
-        # Log and print output for each product
-        log_file_path = "/Users/steffen/Lokal/CronJobs/logfile.log"
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        log_entry = f"{timestamp} - {output}\n"
-        with open(log_file_path, "a") as log_file:
-            log_file.write(log_entry)
         print(output)
-    # Close the browser after checking all products
     browser.close()
