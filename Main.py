@@ -1,4 +1,4 @@
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
 import os
 from geopy.geocoders import Nominatim
 from datetime import datetime
@@ -67,13 +67,13 @@ class Product:
 PRODUCTS_AND_PRICES = [
     Product("Crema d'Oro", 11.00),
     Product("Hafermilch", 0.98),
-    Product("Red Bull", 0.90),
+    Product("Red Bull", 0.99),
 ]
 
 init_db()
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=True)
+    browser = p.chromium.launch(headless=False)
     page = browser.new_page()
 
     for item in PRODUCTS_AND_PRICES:
@@ -81,45 +81,51 @@ with sync_playwright() as p:
         target_price = item.target_price
         url = f"https://www.meinprospekt.de/webapp/?query={product}&lat={my_lat}&lng={my_long}"
 
-        page.goto(url)
-        page.wait_for_load_state("load", timeout=20000)
-        offer_section = page.wait_for_selector(
-            ".search-group-grid-content", timeout=30000
-        )
-        if not offer_section:
-            output = f"No Product {product} found"
-        else:
-            products = offer_section.query_selector_all(
-                ".card.card--offer.slider-preventClick"
+        try:
+            page.goto(url)
+            page.wait_for_load_state("load", timeout=20000)
+            offer_section = page.wait_for_selector(
+                ".search-group-grid-content", timeout=30000
             )
-            output = ""
-            for product_element in products:
-                store_element = product_element.query_selector(".card__subtitle")
-                price_element = product_element.query_selector(
-                    ".card__prices-main-price"
+            if not offer_section:
+                output = f"No Product {product} found"
+            else:
+                products = offer_section.query_selector_all(
+                    ".card.card--offer.slider-preventClick"
                 )
-                if store_element and price_element:
-                    store = store_element.inner_text().strip()
-                    price_text = price_element.inner_text().strip()
-                    try:
-                        price_value = float(
-                            price_text.replace("€", "").replace(",", ".").strip()
-                        )
-                        if price_value <= target_price:
-                            subject = "Deal Alert!"
-                            product_name_element = product_element.query_selector(
-                                ".card__title"
+                output = ""
+                for product_element in products:
+                    store_element = product_element.query_selector(".card__subtitle")
+                    price_element = product_element.query_selector(
+                        ".card__prices-main-price"
+                    )
+                    if store_element and price_element:
+                        store = store_element.inner_text().strip()
+                        price_text = price_element.inner_text().strip()
+                        try:
+                            price_value = float(
+                                price_text.replace("€", "").replace(",", ".").strip()
                             )
-                            if product_name_element:
-                                product_name = product_name_element.inner_text().strip()
-                            else:
-                                product_name = "Unknown Product"
+                            if price_value <= target_price:
+                                subject = "Deal Alert!"
+                                product_name_element = product_element.query_selector(
+                                    ".card__title"
+                                )
+                                if product_name_element:
+                                    product_name = product_name_element.inner_text().strip()
+                                else:
+                                    product_name = "Unknown Product"
 
-                            message = f"Deal alert! {store} offers {product_name} for {price_text}! (Target price: €{target_price:.2f})"
-                            send_email(subject, message)
-                            log_deal(product_name, store, price_value, target_price)
-                            output += message + "\n"
-                    except ValueError:
-                        print(f"Could not convert price to float: {price_text}")
+                                message = f"Deal alert! {store} offers {product_name} for {price_text}! (Target price: €{target_price:.2f})"
+                                send_email(subject, message)
+                                log_deal(product_name, store, price_value, target_price)
+                                output += message + "\n"
+                        except ValueError:
+                            print(f"Could not convert price to float: {price_text}")
+        except PlaywrightTimeoutError:
+            print(f"Timeout exceeded for {product}. Moving to the next item.")
+            continue
+
         print(output)
     browser.close()
+# %%

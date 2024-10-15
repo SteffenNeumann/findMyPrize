@@ -17,8 +17,21 @@
 			src="https://pyscript.net/releases/2022.12.1/pyscript.js"></script>
 	</head>
 	<body>
-		
-		<!-- <py-script src="/Main.py"></py-script> -->
+		<!-- <py-config>
+			packages = ["playwright.sync_api", "geopy.geocoders"]
+		  </py-config>
+		<py-script src="/Main.py">
+			from playwright.sync_api import sync_playwright
+			import os
+			from geopy.geocoders import Nominatim
+			from datetime import datetime
+			import smtplib
+			from email.mime.text import MIMEText
+			from email.mime.multipart import MIMEMultipart
+			from dotenv import load_dotenv
+			from dataclasses import dataclass
+			import sqlite3
+		</py-script> -->
 		<div class="ellipse-parent">
 			<div class="frame-child"></div>
 			<img
@@ -30,14 +43,14 @@
 			</div>
 			<div class="frame-bucket">
 				<div class="dein-bucket">Dein Bucket</div>
-				<div class="section-data">
+				<div class="section-country">
 					<div class="time">
 						<div class="time-to-run">Time to run</div>
 						<div class="input-dropdown"></div>
 					</div>
 					<div class="mail">
 						<div class="e-mail">E-Mail</div>
-						<div class="input-mail"></div>
+						<div class="input-mail" contenteditable="True"></div>
 					</div>
 				</div>
 				<div class="section-out">
@@ -76,7 +89,7 @@
 					</div>
 					<div class="coloum-prize">
 						<div class="preis">Preis</div>
-						<div class="input-prize01"></div>
+						<div class="input-prize01" contenteditable="True"></div>
 						<div class="input-prize01"></div>
 						<div class="input-prize01"></div>
 						<div class="input-prize01"></div>
