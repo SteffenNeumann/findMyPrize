@@ -73,7 +73,7 @@ PRODUCTS_AND_PRICES = [
 init_db()
 
 with sync_playwright() as p:
-    browser = p.chromium.launch(headless=False)
+    browser = p.chromium.launch(headless=True)
     page = browser.new_page()
 
     for item in PRODUCTS_AND_PRICES:
@@ -128,4 +128,3 @@ with sync_playwright() as p:
 
         print(output)
     browser.close()
-# %%
